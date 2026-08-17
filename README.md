@@ -1,58 +1,51 @@
 # Financial Sentiment Intelligence
 
-A small end-to-end NLP project for classifying financial headlines and short market commentary as positive, neutral, or negative.
+An end-to-end NLP project for classifying short financial headlines and market commentary as positive, neutral, or negative.
 
-I built this as a production-style extension of my MSc work on financial news and stock-tweet sentiment analysis. The aim here is not to chase a headline accuracy number, but to show a clean workflow that can be reproduced, tested, and extended.
+I built this as a production-style extension of my MSc work on financial news and stock-tweet sentiment analysis. The repository now includes an interpretable classical baseline, a FinBERT inference path, a real Financial PhraseBank data loader, model comparison tooling, an API, a Streamlit demo, Docker support, and automated tests.
 
-## What it does
+## What the project covers
 
-- loads labelled financial text from CSV
-- cleans and validates the input data
-- trains a TF-IDF + logistic regression baseline
-- reports accuracy and macro precision/recall/F1
-- saves the trained pipeline and metadata
-- runs predictions from the command line
-- includes tests for preprocessing and model behaviour
+- CSV data validation and cleaning
+- TF-IDF + logistic regression baseline
+- FinBERT financial-sentiment inference
+- Financial PhraseBank ingestion
+- baseline-vs-FinBERT evaluation
+- reproducible JSON metrics and comparison plot
+- FastAPI prediction endpoint
+- Streamlit demo interface
+- Docker deployment path
+- GitHub Actions test matrix
 
-## Why this project
-
-Financial sentiment is a useful NLP problem because the same word can mean something different in a market context. A phrase such as "beats estimates" is usually positive, while "guidance cut" is usually negative. A useful system therefore needs more than simple positive/negative word counting.
-
-This repository starts with an interpretable baseline. The next iteration will compare it with a transformer model and add time-based aggregation for market sentiment monitoring.
-
-## Project structure
+## Repository structure
 
 ```text
 financial-sentiment-intelligence/
-├── data/
-│   └── sample/
+├── .github/workflows/ci.yml
+├── data/sample/
 ├── docs/
-├── notebooks/
-├── src/
-│   └── financial_sentiment/
+├── src/financial_sentiment/
+│   ├── api.py
+│   ├── compare_models.py
+│   ├── data.py
+│   ├── demo_data.py
+│   ├── evaluate.py
+│   ├── finbert.py
+│   ├── model.py
+│   ├── plot_comparison.py
+│   ├── predict.py
+│   ├── real_data.py
+│   └── train.py
 ├── tests/
-├── .gitignore
-├── LICENSE
+├── Dockerfile
+├── streamlit_app.py
 ├── pyproject.toml
 └── README.md
 ```
 
-## Expected input format
+## Install
 
-A CSV file with two columns:
-
-```csv
-text,label
-"Company raises full-year guidance",positive
-"Shares are unchanged after the announcement",neutral
-"Profit warning sends shares lower",negative
-```
-
-Accepted labels are `positive`, `neutral`, and `negative`.
-
-## Quick start
-
-Create a virtual environment and install the project:
+For the lightweight baseline and tests:
 
 ```bash
 python -m venv .venv
@@ -60,13 +53,15 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .[dev]
 ```
 
-Generate a small demo dataset:
+For the full project:
 
 ```bash
-python -m financial_sentiment.demo_data --output data/sample/demo_financial_sentiment.csv
+pip install -e .[all]
 ```
 
-Train the model:
+## 1. Train the baseline
+
+The repository includes a small synthetic dataset so the pipeline can be run without downloading external data.
 
 ```bash
 python -m financial_sentiment.train \
@@ -74,48 +69,138 @@ python -m financial_sentiment.train \
   --model-dir artifacts
 ```
 
-Predict a new sentence:
+The baseline uses TF-IDF unigrams/bigrams and class-balanced logistic regression.
+
+## 2. Load real financial text
+
+The project can download the Financial PhraseBank dataset through Hugging Face Datasets and export it into the same `text,label` format used by the baseline.
 
 ```bash
-python -m financial_sentiment.predict \
+python -m financial_sentiment.real_data \
+  --config sentences_75agree \
+  --output data/processed/financial_phrasebank.csv
+```
+
+The processed dataset is intentionally ignored by Git because it should be reproduced from source rather than committed as generated data.
+
+## 3. Run FinBERT
+
+```python
+from financial_sentiment.finbert import predict_finbert
+
+result = predict_finbert(
+    "The company raised its full-year revenue guidance after strong demand."
+)
+print(result)
+```
+
+The transformer model is loaded lazily, so installing the basic package does not download model weights.
+
+## 4. Compare the models
+
+Train a baseline on a suitable labelled dataset, then run:
+
+```bash
+python -m financial_sentiment.compare_models \
   --model artifacts/model.joblib \
-  --text "The company raised its revenue outlook after strong demand"
+  --limit 300 \
+  --output artifacts/model_comparison.json
 ```
 
-Run the tests:
+This evaluates both models on the same Financial PhraseBank sample and records accuracy, macro precision, macro recall and macro F1.
+
+Generate a chart from the saved metrics:
 
 ```bash
-pytest
+python -m financial_sentiment.plot_comparison \
+  --input artifacts/model_comparison.json \
+  --output docs/model_comparison.png
 ```
 
-## Modelling approach
+No benchmark numbers are hard-coded in this repository. Results should come from an actual run so the project does not present fabricated performance.
 
-The current baseline uses:
+## 5. FastAPI service
 
-- lowercase text normalisation
-- TF-IDF features with unigrams and bigrams
-- logistic regression with class balancing
-- stratified train/test split
-- macro-averaged metrics so that each sentiment class matters
+Install API and transformer dependencies:
 
-The training script saves both the fitted scikit-learn pipeline and a JSON metadata file with the evaluation results.
+```bash
+pip install -e .[transformers,api]
+```
+
+Start the service:
+
+```bash
+uvicorn financial_sentiment.api:app --reload
+```
+
+Endpoints:
+
+```text
+GET  /health
+POST /predict
+```
+
+Example request body:
+
+```json
+{
+  "text": "Profit beats expectations and management raises guidance."
+}
+```
+
+## 6. Streamlit demo
+
+```bash
+pip install -e .[transformers,app]
+streamlit run streamlit_app.py
+```
+
+The app provides a simple text box, predicted sentiment and confidence score.
+
+## Docker
+
+Build and run the API:
+
+```bash
+docker build -t financial-sentiment-intelligence .
+docker run -p 8000:8000 financial-sentiment-intelligence
+```
+
+## Testing
+
+```bash
+pytest -q
+```
+
+The CI workflow runs the lightweight unit tests against Python 3.10, 3.11 and 3.12. Transformer weights are not downloaded during CI; this keeps routine checks fast and avoids coupling basic tests to an external model host.
+
+## Data and model choices
+
+**Financial PhraseBank** is used as the real financial-sentiment evaluation source. The project defaults to the `sentences_75agree` configuration, while the loader also supports the other published agreement thresholds.
+
+**ProsusAI/finbert** provides the transformer comparison. It is a BERT-based model adapted to financial text and outputs positive, negative and neutral sentiment classes.
 
 ## Limitations
 
-This first version is deliberately small. It does not claim to predict stock-price movement, and sentiment should not be treated as an investment signal on its own. The included demo data is synthetic and exists only to make the repository runnable.
+- sentiment is not the same as future stock-price movement
+- the synthetic sample data is only a runnable fixture, not evidence of model quality
+- a proper benchmark should use a fixed evaluation split and record the exact dataset/model versions
+- model confidence is not automatically a calibrated probability
+- long documents need chunking or another long-context strategy
 
-Planned improvements:
+This repository is for NLP engineering and portfolio demonstration. It is not investment advice or an automated trading system.
 
-1. evaluate on a real public financial-sentiment dataset
-2. add a FinBERT comparison
-3. introduce calibration and confidence thresholds
-4. aggregate sentiment by ticker and time window
-5. expose predictions through a lightweight API
-6. add a dashboard for model and sentiment monitoring
+## Next improvements
+
+- create a fixed train/validation/test protocol for Financial PhraseBank
+- add calibration and confidence thresholds
+- add batch inference and ticker/time aggregation
+- persist model-comparison results from a reproducible benchmark run
+- deploy the Streamlit or API demo publicly
 
 ## Skills demonstrated
 
-Python, NLP, scikit-learn, TF-IDF, classification, model evaluation, packaging, testing, reproducibility, and basic MLOps practices.
+Python, NLP, scikit-learn, Transformers, FinBERT, model evaluation, FastAPI, Streamlit, Docker, GitHub Actions, testing, packaging and reproducibility.
 
 ## License
 
