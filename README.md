@@ -2,7 +2,7 @@
 
 An end-to-end NLP project for classifying short financial headlines and market commentary as positive, neutral, or negative.
 
-I built this as a production-style extension of my MSc work on financial news and stock-tweet sentiment analysis. The repository now includes an interpretable classical baseline, a FinBERT inference path, a real Financial PhraseBank data loader, model comparison tooling, an API, a Streamlit demo, Docker support, and automated tests.
+I built this as a production-style extension of my MSc work on financial news and stock-tweet sentiment analysis. The repository includes an interpretable classical baseline, a FinBERT inference path, a Financial PhraseBank data loader, model comparison tooling, an API, a Streamlit demo, Docker support, and automated tests.
 
 ## What the project covers
 
