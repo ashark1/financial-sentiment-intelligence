@@ -14,16 +14,16 @@ def load_financial_phrasebank(config: str = "sentences_75agree") -> pd.DataFrame
             "Dataset support is not installed. Run: pip install -e .[data]"
         ) from exc
 
-    dataset = load_dataset("financial_phrasebank", config, trust_remote_code=True)
+    dataset = load_dataset("takala/financial_phrasebank", config)
     split = dataset["train"]
 
-    id_to_label = {0: "negative", 1: "neutral", 2: "positive"}
-    frame = pd.DataFrame(
-        {
-            "text": split["sentence"],
-            "label": [id_to_label[int(value)] for value in split["label"]],
-        }
-    )
+    labels = split["label"]
+    if labels and not isinstance(labels[0], str):
+        feature = split.features["label"]
+        labels = [feature.int2str(int(value)) for value in labels]
+
+    frame = pd.DataFrame({"text": split["sentence"], "label": labels})
+    frame["label"] = frame["label"].astype(str).str.lower()
     return frame.dropna().drop_duplicates().reset_index(drop=True)
 
 
